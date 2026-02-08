@@ -1,8 +1,8 @@
-import os
 from datetime import datetime
 
-import requests
 from flask import Flask, jsonify, request
+
+from backend.config import load_api_key
 
 ALPHAVANTAGE_BASE_URL = "https://www.alphavantage.co/query"
 DEFAULT_PERIODS = [9, 21, 50, 200]
@@ -10,34 +10,11 @@ DEFAULT_PERIODS = [9, 21, 50, 200]
 app = Flask(__name__)
 
 
-def load_api_key():
-    api_key = os.getenv("ALPHAVANTAGE_API_KEY")
-    if api_key:
-        return api_key
-
-    api_key_file = os.getenv("ALPHAVANTAGE_API_KEY_FILE")
-    if not api_key_file:
-        raise RuntimeError(
-            "Missing ALPHAVANTAGE_API_KEY or ALPHAVANTAGE_API_KEY_FILE"
-        )
-
-    try:
-        with open(api_key_file, "r", encoding="utf-8") as handle:
-            file_key = handle.read().strip()
-    except OSError as exc:
-        raise RuntimeError(
-            f"Unable to read ALPHAVANTAGE_API_KEY_FILE: {exc}"
-        ) from exc
-
-    if not file_key:
-        raise RuntimeError("ALPHAVANTAGE_API_KEY_FILE was empty")
-
-    return file_key
-
-
 def fetch_indicator(
     indicator: str, ticker: str, interval: str, time_period: int, series_type: str
 ):
+    import requests
+
     api_key = load_api_key()
 
     params = {
