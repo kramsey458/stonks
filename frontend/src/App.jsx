@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
+import "./App.css";
 
-const DEFAULT_TICKER = "AAPL";
-
+const DEFAULT_TICKERS = ["AAPL", "MSFT", "TSLA"];
+const PERIODS = [9, 21, 50, 200];
 const storageKey = "favoriteTickers";
 
 const loadFavorites = () => {
   try {
     const stored = window.localStorage.getItem(storageKey);
-    return stored ? JSON.parse(stored) : [];
+    return stored ? JSON.parse(stored) : DEFAULT_TICKERS;
   } catch {
-    return [];
+    return DEFAULT_TICKERS;
   }
 };
 
@@ -17,41 +18,55 @@ const saveFavorites = (favorites) => {
   window.localStorage.setItem(storageKey, JSON.stringify(favorites));
 };
 
+const formatValue = (value) =>
+  typeof value === "number" && Number.isFinite(value)
+    ? value.toFixed(2)
+    : "–";
+
 export default function App() {
-  const [ticker, setTicker] = useState(DEFAULT_TICKER);
-  const [favorites, setFavorites] = useState(() => loadFavorites());
-  const [timePeriod, setTimePeriod] = useState(50);
+  const [tickerInput, setTickerInput] = useState("");
+  const [tickers, setTickers] = useState(() => loadFavorites());
   const [interval, setInterval] = useState("daily");
   const [seriesType, setSeriesType] = useState("close");
-  const [smaData, setSmaData] = useState([]);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState(null);
+  const [results, setResults] = useState([]);
 
   const favoriteOptions = useMemo(
-    () => Array.from(new Set(favorites.map((item) => item.toUpperCase()))),
-    [favorites]
+    () => Array.from(new Set(tickers.map((item) => item.toUpperCase()))),
+    [tickers]
   );
 
   useEffect(() => {
-    saveFavorites(favorites);
-  }, [favorites]);
+    saveFavorites(tickers);
+  }, [tickers]);
 
-  const addFavorite = () => {
-    const trimmed = ticker.trim().toUpperCase();
+  const addTicker = () => {
+    const trimmed = tickerInput.trim().toUpperCase();
     if (!trimmed) return;
-    if (!favorites.includes(trimmed)) {
-      setFavorites((prev) => [...prev, trimmed]);
+    if (!tickers.includes(trimmed)) {
+      setTickers((prev) => [...prev, trimmed]);
     }
+    setTickerInput("");
   };
 
-  const fetchMovingAverage = async () => {
+  const removeTicker = (symbol) => {
+    setTickers((prev) => prev.filter((item) => item !== symbol));
+  };
+
+  const fetchMovingAverages = async () => {
+    if (!tickers.length) {
+      setError("Add at least one ticker to continue.");
+      setStatus("error");
+      return;
+    }
+
     setStatus("loading");
     setError(null);
 
     try {
       const params = new URLSearchParams({
-        ticker,
-        time_period: String(timePeriod),
+        tickers: tickers.join(","),
         interval,
         series_type: seriesType,
       });
@@ -62,7 +77,7 @@ export default function App() {
       }
 
       const payload = await response.json();
-      setSmaData(payload.data ?? []);
+      setResults(payload.data ?? []);
       setStatus("success");
     } catch (fetchError) {
       setError(fetchError.message);
@@ -71,94 +86,127 @@ export default function App() {
   };
 
   return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>Moving Averages</h1>
-      <section style={{ marginBottom: "1.5rem" }}>
-        <label>
-          Ticker
-          <input
-            style={{ marginLeft: "0.5rem" }}
-            value={ticker}
-            onChange={(event) => setTicker(event.target.value.toUpperCase())}
-          />
-        </label>
-        <button style={{ marginLeft: "0.5rem" }} onClick={addFavorite}>
-          Save to Favorites
-        </button>
-        <button style={{ marginLeft: "0.5rem" }} onClick={fetchMovingAverage}>
-          Load SMA
-        </button>
+    <div className="app">
+      <header className="hero">
+        <div>
+          <p className="eyebrow">Market Insights</p>
+          <h1>Moving averages at a glance</h1>
+          <p className="subtitle">
+            Track SMA and EMA signals across your watchlist with a modern,
+            configurable dashboard.
+          </p>
+        </div>
+        <div className="hero-card">
+          <h2>Watchlist controls</h2>
+          <p>Manage tickers and update your indicator settings.</p>
+          <div className="control-grid">
+            <label>
+              Interval
+              <select
+                value={interval}
+                onChange={(event) => setInterval(event.target.value)}
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </label>
+            <label>
+              Series
+              <select
+                value={seriesType}
+                onChange={(event) => setSeriesType(event.target.value)}
+              >
+                <option value="close">Close</option>
+                <option value="open">Open</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+          </div>
+          <button
+            className="primary"
+            onClick={fetchMovingAverages}
+            disabled={status === "loading"}
+          >
+            {status === "loading" ? "Loading..." : "Refresh indicators"}
+          </button>
+        </div>
+      </header>
+
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Your watchlist</h2>
+            <p>Add tickers to request SMA and EMA values for 9, 21, 50, and 200 days.</p>
+          </div>
+          <div className="ticker-input">
+            <input
+              value={tickerInput}
+              onChange={(event) => setTickerInput(event.target.value)}
+              placeholder="Add ticker (e.g. NVDA)"
+            />
+            <button onClick={addTicker}>Add</button>
+          </div>
+        </div>
+        <div className="chip-row">
+          {favoriteOptions.map((symbol) => (
+            <span key={symbol} className="chip">
+              {symbol}
+              <button
+                type="button"
+                onClick={() => removeTicker(symbol)}
+                aria-label={`Remove ${symbol}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
       </section>
 
-      <section style={{ marginBottom: "1.5rem" }}>
-        <label>
-          Favorites
-          <select
-            style={{ marginLeft: "0.5rem" }}
-            value={ticker}
-            onChange={(event) => setTicker(event.target.value)}
-          >
-            {[DEFAULT_TICKER, ...favoriteOptions].map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
+      {status === "error" && <div className="alert">{error}</div>}
+
+      <section className="grid">
+        {results.map((item) => (
+          <article key={item.ticker} className="card">
+            <div className="card-header">
+              <div>
+                <h3>{item.ticker}</h3>
+                <p className="muted">
+                  {item.interval} · {item.series_type}
+                </p>
+              </div>
+              <span className="pill">Updated {item.generated_at}</span>
+            </div>
+
+            <div className="table">
+              <div className="table-row table-head">
+                <span>Period</span>
+                <span>SMA</span>
+                <span>EMA</span>
+              </div>
+              {PERIODS.map((period) => (
+                <div key={period} className="table-row">
+                  <span>{period}d</span>
+                  <span>{formatValue(item.sma?.[period])}</span>
+                  <span>{formatValue(item.ema?.[period])}</span>
+                </div>
+              ))}
+            </div>
+
+            {item.errors?.length ? (
+              <div className="card-footer">
+                {item.errors.map((message) => (
+                  <p key={message} className="muted">
+                    {message}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </article>
+        ))}
       </section>
-
-      <section style={{ marginBottom: "1.5rem" }}>
-        <label>
-          Time Period
-          <input
-            type="number"
-            style={{ marginLeft: "0.5rem", width: "6rem" }}
-            value={timePeriod}
-            onChange={(event) => setTimePeriod(Number(event.target.value))}
-          />
-        </label>
-        <label style={{ marginLeft: "1rem" }}>
-          Interval
-          <select
-            style={{ marginLeft: "0.5rem" }}
-            value={interval}
-            onChange={(event) => setInterval(event.target.value)}
-          >
-            <option value="daily">daily</option>
-            <option value="weekly">weekly</option>
-            <option value="monthly">monthly</option>
-          </select>
-        </label>
-        <label style={{ marginLeft: "1rem" }}>
-          Series Type
-          <select
-            style={{ marginLeft: "0.5rem" }}
-            value={seriesType}
-            onChange={(event) => setSeriesType(event.target.value)}
-          >
-            <option value="close">close</option>
-            <option value="open">open</option>
-            <option value="high">high</option>
-            <option value="low">low</option>
-          </select>
-        </label>
-      </section>
-
-      {status === "loading" && <p>Loading…</p>}
-      {status === "error" && <p style={{ color: "crimson" }}>{error}</p>}
-
-      {status === "success" && (
-        <section>
-          <h2>Latest SMA values</h2>
-          <ul>
-            {smaData.slice(0, 5).map((point) => (
-              <li key={point.date}>
-                {point.date}: {point.sma.toFixed(2)}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </main>
+    </div>
   );
 }
